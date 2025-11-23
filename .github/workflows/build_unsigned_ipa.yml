@@ -1,48 +1,41 @@
-name: Build Unsigned IPA for TrollStore
-
+name: Build iSH-AOK Unsigned IPA for TrollStore
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-  workflow_dispatch:  # 允许手动触发
+    branches: [main]  # 推送代码到主分支时触发
+  workflow_dispatch:  # 支持手动触发
 
 jobs:
-  build:
-    runs-on: macos-latest
-
+  build-ipa:
+    runs-on: macos-latest  # 必须用macOS环境编译iOS应用
     steps:
-    - uses: actions/checkout@v3
-      with:
-        submodules: recursive
+      - name: 拉取代码
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'  # 拉取子模块
 
-    - name: Set up Xcode
-      uses: maxim-lobanov/setup-xcode@v1
-      with:
-        xcode-version: latest-stable
+      - name: 配置Xcode编译参数
+        run: |
+          # 设置Xcode项目，关闭签名、指定架构
+          xcodebuild -project ish.xcodeproj \
+            -scheme ish \
+            -configuration Release \
+            CODE_SIGN_IDENTITY="" \  # 清空签名标识
+            CODE_SIGNING_REQUIRED=NO \  # 禁用强制签名
+            CODE_SIGNING_ALLOWED=NO \  # 不允许签名
+            ARCHS="arm64" \  # 适配iOS设备架构
+            SYMROOT=./build  # 指定编译输出目录
 
-    - name: Build .xcarchive
-      run: |
-        xcodebuild archive \
-          -project iSH.xcodeproj \
-          -scheme iSH \
-          -configuration Release \
-          -archivePath build/iSH.xcarchive \
-          CODE_SIGN_IDENTITY="" \
-          CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGNING_ALLOWED=NO
+      - name: 打包.app为无签名IPA
+        run: |
+          # 创建IPA打包目录结构
+          mkdir -p Payload
+          cp -R ./build/Release-iphoneos/ish.app Payload/
+          zip -r iSH-AOK-Unsigned.ipa Payload/  # 直接压缩生成无签名IPA
+          rm -rf Payload
 
-    - name: Package into IPA
-      run: |
-        # 创建一个临时目录结构
-        mkdir -p Payload
-        # 将未签名的 .app 包复制到 Payload 目录中
-        cp -R build/iSH.xcarchive/Products/Applications/iSH.app Payload/
-        # 将 Payload 目录打包成 IPA
-        zip -r iSH-AOK-unsigned.ipa Payload
-
-    - name: Upload IPA
-      uses: actions/upload-artifact@v3
-      with:
-        name: iSH-AOK-Unsigned-IPA
-        path: iSH-AOK-unsigned.ipa
+      - name: 上传IPA产物（适配Artifact v4）
+        uses: actions/upload-artifact@v4  # 用v4版本避免停用问题
+        with:
+          name: iSH-AOK-Unsigned-IPA
+          path: ./iSH-AOK-Unsigned.ipa
+          retention-days: 7  # 产物保留7天，可按需调整
