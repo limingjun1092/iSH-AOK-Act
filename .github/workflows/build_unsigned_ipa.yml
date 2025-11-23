@@ -1,41 +1,40 @@
 name: Build iSH-AOK Unsigned IPA for TrollStore
 on:
   push:
-    branches: [main]  # 推送代码到主分支时触发
-  workflow_dispatch:  # 支持手动触发
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
   build-ipa:
-    runs-on: macos-latest  # 必须用macOS环境编译iOS应用
+    runs-on: macos-latest
     steps:
       - name: 拉取代码
         uses: actions/checkout@v4
         with:
-          submodules: 'recursive'  # 拉取子模块
+          submodules: 'recursive'
 
-      - name: 配置Xcode编译参数
+      - name: 编译并生成.app
         run: |
-             xcodebuild build \
-              -project ish.xcodeproj \
-              -scheme ish \
-              -configuration Release \
-              CODE_SIGN_IDENTITY="" \  # 清空签名标识
-              CODE_SIGNING_REQUIRED=NO \  # 禁用强制签名
-              CODE_SIGNING_ALLOWED=NO \  # 不允许签名
-              ARCHS="arm64" \  # 适配iOS设备架构
-              SYMROOT=./build  # 指定编译输出目录
+          xcodebuild build \
+            -project ish.xcodeproj \
+            -scheme ish \
+            -configuration Release \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ARCHS="arm64" \
+            SYMROOT=./build
 
-      - name: 打包.app为无签名IPA
+      - name: 打包为无签名IPA
         run: |
-          # 创建IPA打包目录结构
           mkdir -p Payload
           cp -R ./build/Release-iphoneos/ish.app Payload/
-          zip -r iSH-AOK-Unsigned.ipa Payload/  # 直接压缩生成无签名IPA
+          zip -r iSH-AOK-Unsigned.ipa Payload/
           rm -rf Payload
 
-      - name: 上传IPA产物（适配Artifact v4）
-        uses: actions/upload-artifact@v4  # 用v4版本避免停用问题
+      - name: 上传IPA产物
+        uses: actions/upload-artifact@v4
         with:
           name: iSH-AOK-Unsigned-IPA
           path: ./iSH-AOK-Unsigned.ipa
-          retention-days: 7  # 产物保留7天，可按需调整
+          retention-days: 7
