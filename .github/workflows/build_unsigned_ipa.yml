@@ -14,22 +14,28 @@ jobs:
 
       - name: 安装依赖工具（LLVM/lld/meson）
         run: |
+          # 更新 Homebrew 并安装核心工具
           brew update > /dev/null 2>&1
           brew install llvm pipx
 
+          # 将 LLVM 工具链路径添加到环境变量
           echo "PATH=$(brew --prefix llvm)/bin:$PATH" >> $GITHUB_ENV
           echo "CC=$(brew --prefix llvm)/bin/clang" >> $GITHUB_ENV
           echo "CXX=$(brew --prefix llvm)/bin/clang++" >> $GITHUB_ENV
           echo "LD=$(brew --prefix llvm)/bin/lld" >> $GITHUB_ENV
-          echo "LDFLAGS=-L$(brew --prefix llvm)/lib" >> $GITHUB_ENV
-          echo "CPPFLAGS=-I$(brew --prefix llvm)/include" >> $GITHUB_ENV
 
+          # 安装 meson
           pipx install meson
           pipx ensurepath
 
+      - name: 生成 Meson 静态配置文件（关键修复）
+        run: |
+          # 提前创建一个 native-file.ini，明确指定 lld 链接器的绝对路径
+          # 这种方式比在命令行中动态生成更可靠，避免了各种解析问题
+          echo -e "[binaries]\nld = '$(brew --prefix llvm)/bin/lld'" > ${{ github.workspace }}/meson-native.ini
+
       - name: 编译 iSH-AOK（无签名）
         run: |
-          # 直接在命令行中构造 MESON_COMMAND，避免 YAML 多行字符串带来的问题
           xcodebuild build \
             -project iSH-AOK.xcodeproj \
             -target iSH-AOK \
@@ -40,8 +46,10 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             ARCHS="arm64" \
             SYMROOT=./build \
+            # 禁用不需要的模块，解决依赖问题
             MESON_ARGS="-Dvdso=disabled -Drt=disabled" \
-            MESON_COMMAND="$(which meson) --native-file <(echo -e '[binaries]\nld = \"'$LD'\"')"
+            # 直接使用提前准备好的静态配置文件
+            MESON_COMMAND="$(which meson) --native-file ${{ github.workspace }}/meson-native.ini"
 
       - name: 打包为无签名 IPA（适配 TrollStore）
         run: |
@@ -56,10 +64,10 @@ jobs:
           zip -r -q iSH-AOK-TrollStore.ipa Payload/
           rm -rf Payload
 
-      - name: 上传 IPA 产物（保留7天）
+      - name: 上传 IPA 产物
         uses: actions/upload-artifact@v4
         with:
-          name: iSH-AOK-Unsigned-IPA
+          name: iSH-AOK-TrollStore-IPA
           path: ./iSH-AOK-TrollStore.ipa
           retention-days: 7
           if-no-files-found: error
