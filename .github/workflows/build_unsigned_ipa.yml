@@ -13,27 +13,33 @@ jobs:
           submodules: recursive
           fetch-depth: 1
 
+      - name: 选择更高版本的 Xcode
+        run: |
+          # 列出所有可用的 Xcode 版本
+          ls -la /Applications/ | grep Xcode
+          # 选择一个较新的版本，例如 Xcode 15.4
+          # 你可以根据实际预装情况选择其他版本，如 Xcode_16.0.app
+          sudo xcode-select -s /Applications/Xcode_15.4.app
+          # 验证当前使用的 Xcode 版本
+          xcodebuild -version
+
       - name: 强制清理+重建目录（彻底干净环境）
         run: |
           rm -rf ./build ./deps/build ./Payload ./iSH-AOK-TrollStore.ipa
           mkdir -p ./build ./deps/build
           xattr -w com.apple.xcode.CreatedByBuildSystem true ./build ./deps/build
 
-      - name: 安装稳定依赖（修正 Meson 安装方式）
+      - name: 安装稳定依赖
         run: |
           brew update > /dev/null 2>&1
-          # 卸载可能冲突的旧版本
           brew uninstall --force llvm meson || true
-          # 安装最新版 llvm@16 和 meson（去掉 meson 版本号）
           brew install llvm@16 meson
-          # 强制链接指定版本
           brew link --force llvm@16 meson
-          # 配置工具链环境变量
           echo "PATH=$(brew --prefix llvm@16)/bin:$(brew --prefix meson)/bin:$PATH" >> $GITHUB_ENV
           echo "CFLAGS=-fno-modules" >> $GITHUB_ENV
           echo "CXXFLAGS=-fno-modules" >> $GITHUB_ENV
 
-      - name: 编译 iSH-AOK（正确传递 Meson 参数）
+      - name: 编译 iSH-AOK
         run: |
           export SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
           xcodebuild build \
