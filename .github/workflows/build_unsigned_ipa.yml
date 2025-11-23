@@ -49,7 +49,7 @@ jobs:
             ONLY_ACTIVE_ARCH=YES \
             CLANG_ENABLE_MODULES=NO \
             ENABLE_BITCODE=NO \
-            -D MESON_ARGS="-Dvdso=disabled -Drt=disabled -Dmodules=disabled"
+            MESON_ARGS="-Dvdso=disabled -Drt=disabled -Dmodules=disabled"
 
       - name: 验证+打包 IPA（容错机制）
         run: |
