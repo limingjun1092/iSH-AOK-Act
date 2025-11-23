@@ -1,43 +1,34 @@
-name: Build iSH-AOK (Linux) Unsigned IPA for TrollStore
+name: Build for TrollStore
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 jobs:
-  build-ipa:
+  build:
     runs-on: macos-latest
     steps:
-      - name: 拉取代码（含子模块）
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          submodules: 'recursive'
+          submodules: recursive
 
-      - name: 编译生成.app（无签名）
-        working-directory: ${{ github.workspace }}
+      - name: Build
         run: |
           xcodebuild build \
             -project iSH-AOK.xcodeproj \
-            -scheme "iSH-AOK" \
-            -configuration "ReleaseLinux" \
-            -sdk iphoneos \
+            -target iSH-AOK \
+            -configuration Release \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             ARCHS="arm64" \
             SYMROOT=./build
 
-      - name: 打包为无签名IPA
-        working-directory: ${{ github.workspace }}
+      - name: Package IPA
         run: |
           mkdir -p Payload
-          cp -R ./build/ReleaseLinux-iphoneos/iSH-AOK+Linux.app Payload/
-          zip -r iSH-AOK-Linux-Unsigned.ipa Payload/
-          rm -rf Payload
+          cp -R build/Release-iphoneos/iSH-AOK.app Payload/
+          zip -r iSH-AOK-TrollStore.ipa Payload
 
-      - name: 上传IPA产物
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: iSH-AOK-Linux-Unsigned-IPA
-          path: ${{ github.workspace }}/iSH-AOK-Linux-Unsigned.ipa
-          retention-days: 7
+          name: iSH-AOK-TrollStore
+          path: iSH-AOK-TrollStore.ipa
