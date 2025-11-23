@@ -2,28 +2,25 @@ name: Build iSH-AOK (Linux) Unsigned IPA for TrollStore
 on:
   push:
     branches: [main]
-  workflow_dispatch:
+  workflow_dispatch:  # 支持手动触发
 
 jobs:
   build-ipa:
     runs-on: macos-latest
     steps:
-      - name: 拉取代码
+      - name: 拉取代码（含子模块）
         uses: actions/checkout@v4
         with:
           submodules: 'recursive'
 
-      - name: 显示可用的 SDK 版本（用于调试）
-        run: xcodebuild -showsdks
-
-      - name: 编译并生成.app
+      - name: 编译生成.app（无签名）
         working-directory: ${{ github.workspace }}
         run: |
           xcodebuild build \
             -project iSH-AOK.xcodeproj \
-            -scheme "iSH-AOK+Linux" \          # <--- 使用正确的 Scheme 名称
-            -configuration "ReleaseLinux" \    # <--- 使用匹配的 ReleaseLinux 配置
-            -sdk iphoneos \                    # <--- 让系统自动选择最合适的 SDK 版本
+            -scheme "iSH-AOK+Linux" \
+            -configuration "ReleaseLinux" \
+            -sdk iphoneos \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
@@ -33,13 +30,12 @@ jobs:
       - name: 打包为无签名IPA
         working-directory: ${{ github.workspace }}
         run: |
-          # 编译产物的 .app 名称由 Scheme 名称决定，即 "iSH-AOK+Linux.app"
           mkdir -p Payload
           cp -R ./build/ReleaseLinux-iphoneos/iSH-AOK+Linux.app Payload/
           zip -r iSH-AOK-Linux-Unsigned.ipa Payload/
           rm -rf Payload
 
-      - name: 上传IPA产物
+      - name: 上传IPA产物（v4版本，兼容GitHub新规）
         uses: actions/upload-artifact@v4
         with:
           name: iSH-AOK-Linux-Unsigned-IPA
