@@ -1,4 +1,4 @@
-name: Build iSH-AOK (Simple) Unsigned IPA for TrollStore
+name: Build iSH-AOK (Linux) Unsigned IPA for TrollStore
 on:
   push:
     branches: [main]
@@ -13,13 +13,13 @@ jobs:
         with:
           submodules: 'recursive'
 
-      - name: 编译生成.app（无签名，直接使用 Target 名称）
+      - name: 编译生成.app（无签名）
         working-directory: ${{ github.workspace }}
         run: |
           xcodebuild build \
             -project iSH-AOK.xcodeproj \
-            -target "iSH-AOK" \                # <--- 直接指定 Target 名称
-            -configuration "Release" \          # <--- 使用默认的 Release 配置
+            -scheme "iSH-AOK" \
+            -configuration "ReleaseLinux" \
             -sdk iphoneos \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
@@ -31,14 +31,13 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           mkdir -p Payload
-          # .app 名称应与 Target 名称一致
-          cp -R ./build/Release-iphoneos/iSH-AOK.app Payload/
-          zip -r iSH-AOK-Simple-Unsigned.ipa Payload/
+          cp -R ./build/ReleaseLinux-iphoneos/iSH-AOK+Linux.app Payload/
+          zip -r iSH-AOK-Linux-Unsigned.ipa Payload/
           rm -rf Payload
 
       - name: 上传IPA产物
         uses: actions/upload-artifact@v4
         with:
-          name: iSH-AOK-Simple-Unsigned-IPA
-          path: ${{ github.workspace }}/iSH-AOK-Simple-Unsigned.ipa
+          name: iSH-AOK-Linux-Unsigned-IPA
+          path: ${{ github.workspace }}/iSH-AOK-Linux-Unsigned.ipa
           retention-days: 7
