@@ -15,15 +15,15 @@ jobs:
 
       - name: 配置Xcode编译参数
         run: |
-          # 设置Xcode项目，关闭签名、指定架构
-          xcodebuild -project ish.xcodeproj \
-            -scheme ish \
-            -configuration Release \
-            CODE_SIGN_IDENTITY="" \  # 清空签名标识
-            CODE_SIGNING_REQUIRED=NO \  # 禁用强制签名
-            CODE_SIGNING_ALLOWED=NO \  # 不允许签名
-            ARCHS="arm64" \  # 适配iOS设备架构
-            SYMROOT=./build  # 指定编译输出目录
+             xcodebuild build \
+              -project ish.xcodeproj \
+              -scheme ish \
+              -configuration Release \
+              CODE_SIGN_IDENTITY="" \  # 清空签名标识
+              CODE_SIGNING_REQUIRED=NO \  # 禁用强制签名
+              CODE_SIGNING_ALLOWED=NO \  # 不允许签名
+              ARCHS="arm64" \  # 适配iOS设备架构
+              SYMROOT=./build  # 指定编译输出目录
 
       - name: 打包.app为无签名IPA
         run: |
