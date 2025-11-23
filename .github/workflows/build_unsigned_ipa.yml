@@ -16,9 +16,10 @@ jobs:
       - name: 编译并生成.app
         run: |
           xcodebuild build \
-            -project ish.xcodeproj \
-            -scheme ish \
+            -project iSH-AOK.xcodeproj \  # <--- 修正为正确的项目文件名
+            -scheme iSH-AOK \             # <--- 修正为正确的 scheme 名称 (通常与项目名一致)
             -configuration Release \
+            -sdk iphoneos \               # 指定 iOS SDK
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
@@ -28,7 +29,8 @@ jobs:
       - name: 打包为无签名IPA
         run: |
           mkdir -p Payload
-          cp -R ./build/Release-iphoneos/ish.app Payload/
+          # 确认 .app 文件名与 scheme 一致
+          cp -R ./build/Release-iphoneos/iSH-AOK.app Payload/
           zip -r iSH-AOK-Unsigned.ipa Payload/
           rm -rf Payload
 
