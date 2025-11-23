@@ -2,7 +2,7 @@ name: Build iSH-AOK (Linux) Unsigned IPA for TrollStore
 on:
   push:
     branches: [main]
-  workflow_dispatch:  # 支持手动触发
+  workflow_dispatch:
 
 jobs:
   build-ipa:
@@ -35,7 +35,7 @@ jobs:
           zip -r iSH-AOK-Linux-Unsigned.ipa Payload/
           rm -rf Payload
 
-      - name: 上传IPA产物（v4版本，兼容GitHub新规）
+      - name: 上传IPA产物
         uses: actions/upload-artifact@v4
         with:
           name: iSH-AOK-Linux-Unsigned-IPA
