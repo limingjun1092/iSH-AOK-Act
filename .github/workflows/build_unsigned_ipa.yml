@@ -10,13 +10,18 @@ jobs:
         with:
           submodules: recursive
 
-      - name: 安装 Meson 和 Ninja 构建工具
+      - name: 安装依赖工具
         run: |
-          # 使用 Homebrew 安装 pipx
-          brew install pipx
-          # 确保 pipx 可在当前 shell 中直接调用
+          # 安装 LLVM (包含 lld 链接器)
+          brew install llvm pipx
+          
+          # 将 LLVM 工具链添加到 PATH 中
+          echo "PATH=$(brew --prefix llvm)/bin:$PATH" >> $GITHUB_ENV
+          echo "LDFLAGS=-L$(brew --prefix llvm)/lib" >> $GITHUB_ENV
+          echo "CPPFLAGS=-I$(brew --prefix llvm)/include" >> $GITHUB_ENV
+          
+          # 安装 Meson
           pipx ensurepath
-          # 使用 pipx 安装 meson
           pipx install meson
 
       - name: Build
@@ -29,7 +34,9 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             ARCHS="arm64" \
-            SYMROOT=./build
+            SYMROOT=./build \
+            # 关键: 告诉 Meson 在 macOS 上忽略 librt
+            MESON_ARGS="-Drt=disabled"
 
       - name: Package IPA
         run: |
