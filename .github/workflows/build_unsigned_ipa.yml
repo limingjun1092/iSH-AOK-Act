@@ -13,14 +13,11 @@ jobs:
           submodules: recursive
           fetch-depth: 1
 
-      - name: 选择更高版本的 Xcode
+      - name: 选择 Xcode 16.4
         run: |
-          # 列出所有可用的 Xcode 版本
-          ls -la /Applications/ | grep Xcode
-          # 选择一个较新的版本，例如 Xcode 15.4
-          # 你可以根据实际预装情况选择其他版本，如 Xcode_16.0.app
-          sudo xcode-select -s /Applications/Xcode_15.4.app
-          # 验证当前使用的 Xcode 版本
+          # 验证并选择一个存在的 Xcode 版本
+          sudo xcode-select -s /Applications/Xcode_16.4.app
+          # 打印版本信息，确认切换成功
           xcodebuild -version
 
       - name: 强制清理+重建目录（彻底干净环境）
