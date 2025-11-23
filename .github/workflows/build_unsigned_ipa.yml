@@ -19,24 +19,23 @@ jobs:
           mkdir -p ./build ./deps/build
           xattr -w com.apple.xcode.CreatedByBuildSystem true ./build ./deps/build
 
-      - name: 安装稳定依赖（规避版本冲突）
+      - name: 安装稳定依赖（修正 Meson 安装方式）
         run: |
           brew update > /dev/null 2>&1
+          # 卸载可能冲突的旧版本
           brew uninstall --force llvm meson || true
-          brew install llvm@16 meson@1.2
-          brew link --force llvm@16 meson@1.2
-          echo "PATH=$(brew --prefix llvm@16)/bin:$(brew --prefix meson@1.2)/bin:$PATH" >> $GITHUB_ENV
-          # 这些 CFLAGS 等环境变量主要是为了 xcodebuild 自身的编译步骤，
-          # 而不是为了 Meson。对于 Meson，我们将通过 MESON_ARGS 传递。
+          # 安装最新版 llvm@16 和 meson（去掉 meson 版本号）
+          brew install llvm@16 meson
+          # 强制链接指定版本
+          brew link --force llvm@16 meson
+          # 配置工具链环境变量
+          echo "PATH=$(brew --prefix llvm@16)/bin:$(brew --prefix meson)/bin:$PATH" >> $GITHUB_ENV
           echo "CFLAGS=-fno-modules" >> $GITHUB_ENV
           echo "CXXFLAGS=-fno-modules" >> $GITHUB_ENV
 
       - name: 编译 iSH-AOK（正确传递 Meson 参数）
         run: |
-          # 显式指定 SDKROOT
           export SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
-          
-          # 核心编译命令
           xcodebuild build \
             -project iSH-AOK.xcodeproj \
             -target iSH-AOK \
@@ -50,7 +49,6 @@ jobs:
             ONLY_ACTIVE_ARCH=YES \
             CLANG_ENABLE_MODULES=NO \
             ENABLE_BITCODE=NO \
-            # 关键改动：通过 -D 传递 Meson 参数给 Xcode 的 build setting
             -D MESON_ARGS="-Dvdso=disabled -Drt=disabled -Dmodules=disabled"
 
       - name: 验证+打包 IPA（容错机制）
