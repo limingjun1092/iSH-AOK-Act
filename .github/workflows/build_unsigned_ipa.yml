@@ -12,51 +12,60 @@ jobs:
           submodules: recursive
           fetch-depth: 1
 
-      - name: 安装依赖工具
+      - name: 强制清理旧构建目录（解决 clean 失败）
         run: |
-          # 更新 Homebrew
+          # 直接删除旧构建产物，规避 Xcode 清理逻辑报错
+          rm -rf ./build ./deps/build ./Payload ./iSH-AOK-TrollStore.ipa
+          # 创建干净的构建目录并标记为 Xcode 可管理
+          mkdir -p ./build
+          xattr -w com.apple.xcode.CreatedByBuildSystem true ./build
+
+      - name: 安装依赖工具（锁定版本+完整工具链）
+        run: |
           brew update > /dev/null 2>&1
+          # 安装指定版本 LLVM 和 meson，避免版本兼容问题
+          brew install llvm@17 meson
+          # 强制链接 LLVM 17，确保优先使用
+          brew link --force llvm@17
+          # 配置完整工具链环境变量，覆盖系统默认
+          echo "PATH=$(brew --prefix llvm@17)/bin:$PATH" >> $GITHUB_ENV
+          echo "CC=$(brew --prefix llvm@17)/bin/clang" >> $GITHUB_ENV
+          echo "CXX=$(brew --prefix llvm@17)/bin/clang++" >> $GITHUB_ENV
+          echo "LD=$(brew --prefix llvm@17)/bin/lld" >> $GITHUB_ENV
+          echo "AR=$(brew --prefix llvm@17)/bin/llvm-ar" >> $GITHUB_ENV
+          echo "RANLIB=$(brew --prefix llvm@17)/bin/llvm-ranlib" >> $GITHUB_ENV
+          echo "STRIP=$(brew --prefix llvm@17)/bin/llvm-strip" >> $GITHUB_ENV
 
-          # 安装核心工具：LLVM (提供 clang, lld) 和 meson
-          brew install llvm meson
-
-          # 配置环境变量，将 LLVM 工具链放在最前面
-          echo "PATH=$(brew --prefix llvm)/bin:$PATH" >> $GITHUB_ENV
-          echo "CC=$(brew --prefix llvm)/bin/clang" >> $GITHUB_ENV
-          echo "CXX=$(brew --prefix llvm)/bin/clang++" >> $GITHUB_ENV
-          echo "LD=$(brew --prefix llvm)/bin/lld" >> $GITHUB_ENV
-          echo "AR=$(brew --prefix llvm)/bin/llvm-ar" >> $GITHUB_ENV
-          echo "RANLIB=$(brew --prefix llvm)/bin/llvm-ranlib" >> $GITHUB_ENV
-
-      - name: 生成 Meson 工具链配置文件
+      - name: 生成 Meson 工具链配置（强制指定所有工具）
         run: |
-          # 创建一个 meson 工具链文件，明确指定所有工具
-          # 这可以确保 meson 在构建 libish 时使用我们指定的 LLVM 工具链
-          cat > meson-cross-file.ini << EOF
+          cat > ./meson-config.ini << EOF
           [binaries]
           c = '${{ env.CC }}'
           cxx = '${{ env.CXX }}'
           ld = '${{ env.LD }}'
           ar = '${{ env.AR }}'
           ranlib = '${{ env.RANLIB }}'
-          strip = '$(brew --prefix llvm)/bin/llvm-strip'
+          strip = '${{ env.STRIP }}'
 
           [host_machine]
           system = 'darwin'
           cpu_family = 'aarch64'
           cpu = 'aarch64'
           endian = 'little'
+
+          [built-in options]
+          c_args = ['-arch', 'arm64', '-isysroot', '${{ env.SDKROOT }}']
+          c_link_args = ['-fuse-ld=lld']
+
+          [properties]
+          needs_exe_wrapper = false
           EOF
 
-      - name: 编译 iSH-AOK（无签名）
+      - name: 编译 iSH-AOK（无签名+禁用 VDSO）
         run: |
-          # 清理之前的构建产物，确保环境干净
-          xcodebuild clean \
-            -project iSH-AOK.xcodeproj \
-            -target iSH-AOK \
-            -configuration Release
-
-          # 执行构建
+          # 显式指定 SDKROOT，避免路径问题
+          export SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
+          # 执行构建，禁用 VDSO 和 rt 库，强制使用自定义工具链
           xcodebuild build \
             -project iSH-AOK.xcodeproj \
             -target iSH-AOK \
@@ -67,27 +76,26 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             ARCHS="arm64" \
             SYMROOT=./build \
-            # 核心：禁用 VDSO，这是避免所有复杂问题的关键
-            # 同时禁用 rt 库，因为 macOS 没有
+            ONLY_ACTIVE_ARCH=YES \
+            # 核心：彻底禁用 VDSO，规避所有相关编译错误
             MESON_ARGS="-Dvdso=disabled -Drt=disabled" \
-            # 将我们的工具链文件传递给 meson
-            MESON_COMMAND="meson setup --cross-file ${{ github.workspace }}/meson-cross-file.ini"
+            # 强制使用自定义工具链配置
+            MESON_COMMAND="meson setup --cross-file ./meson-config.ini --native-file ./meson-config.ini ./build/meson ./build/meson"
 
-      - name: 验证并打包 IPA
+      - name: 验证并打包 IPA（容错处理）
         run: |
           APP_PATH="./build/Release-iphoneos/iSH-AOK.app"
+          # 验证编译产物是否存在
           if [ ! -d "$APP_PATH" ]; then
-            echo "错误：未找到编译后的 .app 文件！"
+            echo "错误：未找到编译后的 .app 文件"
             exit 1
           fi
-
-          echo "开始打包 IPA..."
+          # 打包 IPA（适配 TrollStore 无签名要求）
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
           zip -r -q iSH-AOK-TrollStore.ipa Payload/
           rm -rf Payload
-
-          echo "IPA 打包完成：iSH-AOK-TrollStore.ipa"
+          echo "IPA 打包完成：$(ls -lh iSH-AOK-TrollStore.ipa)"
 
       - name: 上传 IPA 产物
         uses: actions/upload-artifact@v4
