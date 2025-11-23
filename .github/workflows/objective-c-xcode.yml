@@ -1,0 +1,41 @@
+name: Build for TrollStore
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: 安装 Meson 和 Ninja 构建工具
+        run: |
+          # 确保 pip 是最新版本
+          python3 -m pip install --upgrade pip
+          # 安装 meson 和 ninja（iSH-AOK 依赖的构建工具）
+          pip3 install meson ninja
+
+      - name: Build
+        run: |
+          xcodebuild build \
+            -project iSH-AOK.xcodeproj \
+            -target iSH-AOK \
+            -configuration Release \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ARCHS="arm64" \
+            SYMROOT=./build
+
+      - name: Package IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/Release-iphoneos/iSH-AOK.app Payload/
+          zip -r iSH-AOK-TrollStore.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iSH-AOK-TrollStore
+          path: iSH-AOK-TrollStore.ipa
