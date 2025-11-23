@@ -1,60 +1,72 @@
-name: Build for TrollStore
+name: Build iSH-AOK for TrollStore
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # 支持手动触发重试
 
 jobs:
-  build:
+  build-ipa:
     runs-on: macos-latest
     steps:
-      - name: Checkout code
+      - name: 拉取代码（含子模块）
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          fetch-depth: 1  # 加速拉取，避免冗余历史
 
-      - name: Install Dependencies
+      - name: 安装依赖工具（LLVM/lld/meson）
         run: |
-          # 更新 Homebrew 并安装所需工具
-          brew update
+          # 更新 Homebrew 并安装核心工具
+          brew update > /dev/null 2>&1
           brew install llvm pipx
 
-          # 将 LLVM (包含 lld) 的路径添加到环境变量中
-          # 这确保了 meson 和 xcodebuild 能找到 lld 链接器
+          # 关键：将 LLVM 工具链（含 lld）路径置顶到环境变量
+          # 确保 clang 优先使用 LLVM 版本，而非系统默认
           echo "PATH=$(brew --prefix llvm)/bin:$PATH" >> $GITHUB_ENV
+          echo "CC=$(brew --prefix llvm)/bin/clang" >> $GITHUB_ENV
+          echo "CXX=$(brew --prefix llvm)/bin/clang++" >> $GITHUB_ENV
+          echo "LD=$(brew --prefix llvm)/bin/lld" >> $GITHUB_ENV  # 显式指定 lld 链接器
           echo "LDFLAGS=-L$(brew --prefix llvm)/lib" >> $GITHUB_ENV
           echo "CPPFLAGS=-I$(brew --prefix llvm)/include" >> $GITHUB_ENV
 
-          # 安装 meson
+          # 安装 meson（隔离环境，避免污染系统 Python）
           pipx install meson
+          pipx ensurepath  # 确保 meson 命令全局可调用
 
-      - name: Build with Xcode
+      - name: 编译 iSH-AOK（无签名）
         run: |
           xcodebuild build \
             -project iSH-AOK.xcodeproj \
             -target iSH-AOK \
             -configuration Release \
+            -sdk iphoneos \  # 明确指定 iOS SDK，避免默认使用 macOS SDK
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             ARCHS="arm64" \
             SYMROOT=./build \
-            # 关键修正：
-            # 1. 显式指定 meson 命令路径，避免 PATH 问题
-            # 2. 传递 -Drt=disabled 参数给 meson，解决 macOS 上找不到 librt 的问题
-            MESON_COMMAND="$(pipx run --which meson)" \
-            MESON_ARGS="-Drt=disabled"
+            # 核心参数：禁用 VDSO 编译+跳过 librt 链接
+            MESON_ARGS="-Dvdso=disabled -Drt=disabled" \
+            # 强制传递 LLVM 工具链路径给 meson
+            MESON_COMMAND="$(which meson) --native-file <(echo -e '[binaries]\nld = \"'$LD'\"')"
 
-      - name: Package IPA
+      - name: 打包为无签名 IPA（适配 TrollStore）
         run: |
-          # 创建 Payload 目录并拷贝 .app 文件
+          # 确认编译产物路径（Release-iphoneos 为 iOS 编译输出目录）
+          APP_PATH="./build/Release-iphoneos/iSH-AOK.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "错误：未找到编译后的 .app 文件"
+            exit 1
+          fi
+
+          # 按 IPA 标准结构打包
           mkdir -p Payload
-          cp -R build/Release-iphoneos/iSH-AOK.app Payload/
+          cp -R "$APP_PATH" Payload/
+          zip -r -q iSH-AOK-TrollStore.ipa Payload/  # 静默打包，减少日志冗余
+          rm -rf Payload  # 清理临时目录
 
-          # 打包成 IPA 文件
-          zip -r iSH-AOK-TrollStore.ipa Payload
-
-      - name: Upload Artifact
+      - name: 上传 IPA 产物（保留7天）
         uses: actions/upload-artifact@v4
         with:
-          name: iSH-AOK-TrollStore-IPA
-          path: iSH-AOK-TrollStore.ipa
-          if-no-files-found: error
+          name: iSH-AOK-Unsigned-IPA
+          path: ./iSH-AOK-TrollStore.ipa
+          retention-days: 7
+          if-no-files-found: error  # 无产物时明确报错，便于排查
