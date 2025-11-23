@@ -1,4 +1,5 @@
 name: Build iSH-AOK for TrollStore
+
 on:
   workflow_dispatch:
 
@@ -12,26 +13,30 @@ jobs:
           submodules: recursive
           fetch-depth: 1
 
-      - name: 安装必要依赖
+      - name: 强制清理+重建目录（彻底干净环境）
+        run: |
+          rm -rf ./build ./deps/build ./Payload ./iSH-AOK-TrollStore.ipa
+          mkdir -p ./build ./deps/build
+          xattr -w com.apple.xcode.CreatedByBuildSystem true ./build ./deps/build
+
+      - name: 安装稳定依赖（规避版本冲突）
         run: |
           brew update > /dev/null 2>&1
-          brew install llvm meson
+          brew uninstall --force llvm meson || true
+          brew install llvm@16 meson@1.2
+          brew link --force llvm@16 meson@1.2
+          echo "PATH=$(brew --prefix llvm@16)/bin:$(brew --prefix meson@1.2)/bin:$PATH" >> $GITHUB_ENV
+          # 这些 CFLAGS 等环境变量主要是为了 xcodebuild 自身的编译步骤，
+          # 而不是为了 Meson。对于 Meson，我们将通过 MESON_ARGS 传递。
+          echo "CFLAGS=-fno-modules" >> $GITHUB_ENV
+          echo "CXXFLAGS=-fno-modules" >> $GITHUB_ENV
 
-      - name: 关键修复：修改 Xcode 项目的 Meson 构建脚本
+      - name: 编译 iSH-AOK（正确传递 Meson 参数）
         run: |
-          # 定义要插入的 Meson 参数
-          # -Dvdso=disabled: 禁用 VDSO 构建
-          # -Drt=disabled: 禁用 librt 链接
-          MESON_EXTRA_ARGS="-Dvdso=disabled -Drt=disabled"
-
-          # 使用 sed 命令直接修改 Xcode 项目中的 Run Script 内容
-          # 这个脚本位于 libish 目标的 Build Phases 中
-          # 我们在 meson setup 命令后插入我们的额外参数
-          sed -i '' "s|\$(MESON_COMMAND) setup|\$(MESON_COMMAND) setup $MESON_EXTRA_ARGS|g" \
-              iSH-AOK.xcodeproj/project.pbxproj
-
-      - name: 编译 iSH-AOK（无签名）
-        run: |
+          # 显式指定 SDKROOT
+          export SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
+          
+          # 核心编译命令
           xcodebuild build \
             -project iSH-AOK.xcodeproj \
             -target iSH-AOK \
@@ -41,22 +46,27 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             ARCHS="arm64" \
-            SYMROOT=./build
+            SYMROOT=./build \
+            ONLY_ACTIVE_ARCH=YES \
+            CLANG_ENABLE_MODULES=NO \
+            ENABLE_BITCODE=NO \
+            # 关键改动：通过 -D 传递 Meson 参数给 Xcode 的 build setting
+            -D MESON_ARGS="-Dvdso=disabled -Drt=disabled -Dmodules=disabled"
 
-      - name: 打包为无签名 IPA
+      - name: 验证+打包 IPA（容错机制）
         run: |
           APP_PATH="./build/Release-iphoneos/iSH-AOK.app"
           if [ ! -d "$APP_PATH" ]; then
-            echo "错误：未找到编译后的 .app 文件"
+            echo "错误：未找到编译产物，请检查日志"
             exit 1
           fi
-
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
           zip -r -q iSH-AOK-TrollStore.ipa Payload/
           rm -rf Payload
+          echo "IPA 打包成功：$(ls -lh iSH-AOK-TrollStore.ipa)"
 
-      - name: 上传 IPA 产物
+      - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
           name: iSH-AOK-TrollStore-IPA
