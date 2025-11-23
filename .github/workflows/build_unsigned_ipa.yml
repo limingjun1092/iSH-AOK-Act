@@ -6,25 +6,27 @@ jobs:
   build:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: 安装依赖工具
+      - name: Install Dependencies
         run: |
-          # 安装 LLVM (包含 lld 链接器)
+          # 更新 Homebrew 并安装所需工具
+          brew update
           brew install llvm pipx
-          
-          # 将 LLVM 工具链添加到 PATH 中
+
+          # 将 LLVM (包含 lld) 的路径添加到环境变量中
+          # 这确保了 meson 和 xcodebuild 能找到 lld 链接器
           echo "PATH=$(brew --prefix llvm)/bin:$PATH" >> $GITHUB_ENV
           echo "LDFLAGS=-L$(brew --prefix llvm)/lib" >> $GITHUB_ENV
           echo "CPPFLAGS=-I$(brew --prefix llvm)/include" >> $GITHUB_ENV
-          
-          # 安装 Meson
-          pipx ensurepath
+
+          # 安装 meson
           pipx install meson
 
-      - name: Build
+      - name: Build with Xcode
         run: |
           xcodebuild build \
             -project iSH-AOK.xcodeproj \
@@ -35,16 +37,24 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             ARCHS="arm64" \
             SYMROOT=./build \
-            # 关键: 告诉 Meson 在 macOS 上忽略 librt
+            # 关键修正：
+            # 1. 显式指定 meson 命令路径，避免 PATH 问题
+            # 2. 传递 -Drt=disabled 参数给 meson，解决 macOS 上找不到 librt 的问题
+            MESON_COMMAND="$(pipx run --which meson)" \
             MESON_ARGS="-Drt=disabled"
 
       - name: Package IPA
         run: |
+          # 创建 Payload 目录并拷贝 .app 文件
           mkdir -p Payload
           cp -R build/Release-iphoneos/iSH-AOK.app Payload/
+
+          # 打包成 IPA 文件
           zip -r iSH-AOK-TrollStore.ipa Payload
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: iSH-AOK-TrollStore
+          name: iSH-AOK-TrollStore-IPA
           path: iSH-AOK-TrollStore.ipa
+          if-no-files-found: error
