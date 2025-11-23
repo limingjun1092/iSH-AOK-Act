@@ -14,12 +14,13 @@ jobs:
           submodules: 'recursive'
 
       - name: 编译并生成.app
+        working-directory: ${{ github.workspace }}
         run: |
           xcodebuild build \
-            -project iSH-AOK.xcodeproj \  # <--- 修正为正确的项目文件名
-            -scheme iSH-AOK \             # <--- 修正为正确的 scheme 名称 (通常与项目名一致)
+            -project iSH-AOK.xcodeproj \
+            -scheme iSH-AOK \
             -configuration Release \
-            -sdk iphoneos \               # 指定 iOS SDK
+            -sdk iphoneos \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
@@ -27,9 +28,9 @@ jobs:
             SYMROOT=./build
 
       - name: 打包为无签名IPA
+        working-directory: ${{ github.workspace }}
         run: |
           mkdir -p Payload
-          # 确认 .app 文件名与 scheme 一致
           cp -R ./build/Release-iphoneos/iSH-AOK.app Payload/
           zip -r iSH-AOK-Unsigned.ipa Payload/
           rm -rf Payload
@@ -38,5 +39,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: iSH-AOK-Unsigned-IPA
-          path: ./iSH-AOK-Unsigned.ipa
+          path: ${{ github.workspace }}/iSH-AOK-Unsigned.ipa  # <--- 这里也使用绝对路径
           retention-days: 7
