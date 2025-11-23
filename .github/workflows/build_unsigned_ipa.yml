@@ -13,12 +13,16 @@ jobs:
         with:
           submodules: 'recursive'
 
-      - name: 编译生成.app（无签名）
+      - name: 列出所有可用的 Target（用于调试）
+        working-directory: ${{ github.workspace }}
+        run: xcodebuild -project iSH-AOK.xcodeproj -list
+
+      - name: 编译生成.app（无签名，直接使用 Target 名称）
         working-directory: ${{ github.workspace }}
         run: |
           xcodebuild build \
             -project iSH-AOK.xcodeproj \
-            -scheme "iSH-AOK+Linux" \
+            -target "iSH-AOK+Linux" \          # <--- 使用 Target 名称，而不是 Scheme 名称
             -configuration "ReleaseLinux" \
             -sdk iphoneos \
             CODE_SIGN_IDENTITY="" \
@@ -31,6 +35,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           mkdir -p Payload
+          # 注意：.app 的名称通常与 Target 名称一致
           cp -R ./build/ReleaseLinux-iphoneos/iSH-AOK+Linux.app Payload/
           zip -r iSH-AOK-Linux-Unsigned.ipa Payload/
           rm -rf Payload
