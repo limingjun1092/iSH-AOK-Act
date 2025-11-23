@@ -1,6 +1,6 @@
 name: Build iSH-AOK for TrollStore
 on:
-  workflow_dispatch:  # 支持手动触发重试
+  workflow_dispatch:
 
 jobs:
   build-ipa:
@@ -10,58 +10,51 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
-          fetch-depth: 1  # 加速拉取，避免冗余历史
+          fetch-depth: 1
 
       - name: 安装依赖工具（LLVM/lld/meson）
         run: |
-          # 更新 Homebrew 并安装核心工具
           brew update > /dev/null 2>&1
           brew install llvm pipx
 
-          # 关键：将 LLVM 工具链（含 lld）路径置顶到环境变量
-          # 确保 clang 优先使用 LLVM 版本，而非系统默认
           echo "PATH=$(brew --prefix llvm)/bin:$PATH" >> $GITHUB_ENV
           echo "CC=$(brew --prefix llvm)/bin/clang" >> $GITHUB_ENV
           echo "CXX=$(brew --prefix llvm)/bin/clang++" >> $GITHUB_ENV
-          echo "LD=$(brew --prefix llvm)/bin/lld" >> $GITHUB_ENV  # 显式指定 lld 链接器
+          echo "LD=$(brew --prefix llvm)/bin/lld" >> $GITHUB_ENV
           echo "LDFLAGS=-L$(brew --prefix llvm)/lib" >> $GITHUB_ENV
           echo "CPPFLAGS=-I$(brew --prefix llvm)/include" >> $GITHUB_ENV
 
-          # 安装 meson（隔离环境，避免污染系统 Python）
           pipx install meson
-          pipx ensurepath  # 确保 meson 命令全局可调用
+          pipx ensurepath
 
       - name: 编译 iSH-AOK（无签名）
         run: |
+          # 直接在命令行中构造 MESON_COMMAND，避免 YAML 多行字符串带来的问题
           xcodebuild build \
             -project iSH-AOK.xcodeproj \
             -target iSH-AOK \
             -configuration Release \
-            -sdk iphoneos \  # 明确指定 iOS SDK，避免默认使用 macOS SDK
+            -sdk iphoneos \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             ARCHS="arm64" \
             SYMROOT=./build \
-            # 核心参数：禁用 VDSO 编译+跳过 librt 链接
             MESON_ARGS="-Dvdso=disabled -Drt=disabled" \
-            # 强制传递 LLVM 工具链路径给 meson
             MESON_COMMAND="$(which meson) --native-file <(echo -e '[binaries]\nld = \"'$LD'\"')"
 
       - name: 打包为无签名 IPA（适配 TrollStore）
         run: |
-          # 确认编译产物路径（Release-iphoneos 为 iOS 编译输出目录）
           APP_PATH="./build/Release-iphoneos/iSH-AOK.app"
           if [ ! -d "$APP_PATH" ]; then
             echo "错误：未找到编译后的 .app 文件"
             exit 1
           fi
 
-          # 按 IPA 标准结构打包
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
-          zip -r -q iSH-AOK-TrollStore.ipa Payload/  # 静默打包，减少日志冗余
-          rm -rf Payload  # 清理临时目录
+          zip -r -q iSH-AOK-TrollStore.ipa Payload/
+          rm -rf Payload
 
       - name: 上传 IPA 产物（保留7天）
         uses: actions/upload-artifact@v4
@@ -69,4 +62,4 @@ jobs:
           name: iSH-AOK-Unsigned-IPA
           path: ./iSH-AOK-TrollStore.ipa
           retention-days: 7
-          if-no-files-found: error  # 无产物时明确报错，便于排查
+          if-no-files-found: error
